@@ -1,3 +1,8 @@
+"""
+VietBook - Ứng dụng tải sách giáo khoa bản gốc & Kho sách điện tử Google Drive
+Thuộc hệ sinh thái vietApps phục vụ cộng đồng giáo dục.
+"""
+
 import streamlit as st
 import os
 import html
@@ -7,33 +12,49 @@ import xml.etree.ElementTree as ET
 import downloader
 import sync_manager
 
+# Tắt cảnh báo SSL không an toàn khi gửi request
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# Mật khẩu quản trị viên (được cấu hình qua biến môi trường VIETBOOK_ADMIN_PASSWORD)
 ADMIN_PASSWORD = os.environ.get("VIETBOOK_ADMIN_PASSWORD", "")
 EXAMPLE_URL = "https://taphuan.nxbgd.vn/tap-huan/doc-sach/sgk-tin-hoc-12-dinh-huong-tin-hoc-ung-dung.4719365396#page=0"
 
 
 def h(text):
+    """Mã hóa các ký tự đặc biệt trong văn bản sang HTML an toàn (tránh lỗi XSS / vỡ giao diện)."""
     return html.escape(str(text or ""), quote=True)
 
 
 def render_html(html_str):
+    """
+    Hàm tiện ích render chuỗi HTML tùy biến vào giao diện Streamlit.
+    Tự động loại bỏ các khoảng trắng đầu dòng dư thừa trước khi hiển thị.
+    """
     cleaned = "\n".join(line.strip() for line in html_str.strip().splitlines())
     st.markdown(cleaned, unsafe_allow_html=True)
 
 
 # ==========================================
-# 1. CẤU HÌNH TỪ config.xml
+# 1. CẤU HÌNH TỪ FILE config.xml
 # ==========================================
 @st.cache_data
 def load_config(xml_path="config.xml"):
+    """
+    Đọc và phân tích toàn bộ cấu hình từ file config.xml:
+    - Thông tin thương hiệu (Tên ứng dụng, câu khẩu hiệu, email hỗ trợ...)
+    - Đường dẫn kho Google Drive trọn bộ và ngày cập nhật mới nhất
+    - Danh sách 12 link Google Drive theo từng khối lớp (Lớp 1 đến Lớp 12)
+    - Hệ sinh thái ứng dụng (vietApps, vietTeach, vietFix...)
+    - Các liên kết mạng xã hội (Zalo, Facebook, YouTube, TikTok...)
+    """
+    # Cấu hình dự phòng mặc định nếu không tìm thấy file config.xml
     config = {
         "master_name": "vietApps",
-        "app_name": "vietBook",
+        "app_name": "VietBook",
         "badge": "Miễn phí",
         "tagline": "Hệ sinh thái ứng dụng miễn phí phục vụ cộng đồng",
         "app_title": "Trình tải sách giáo khoa gốc & Kho Google Drive",
-        "copyright": "© 2026 vietApps • vietBook",
+        "copyright": "© 2026 vietApps • VietBook",
         "support_email": "vietapps.official@gmail.com",
         "connect_message": "Kết nối cộng đồng vietApps",
         "drive_link": "https://drive.google.com/drive/folders/1iXlCFyOBZdM5AfOojn4h3WCVP-mAXdSp?usp=sharing",
@@ -46,8 +67,10 @@ def load_config(xml_path="config.xml"):
     }
 
     def default_grades():
+        """Tạo danh sách 12 khối lớp mặc định khi chưa có link trong file cấu hình."""
         return [{"grade": str(i), "name": f"Lớp {i}", "url": ""} for i in range(1, 13)]
 
+    # Xác định đường dẫn tuyệt đối đến file config.xml dựa trên thư mục chứa app.py
     xml_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), xml_path)
     if not os.path.exists(xml_path):
         config["grade_items"] = default_grades()
@@ -117,8 +140,9 @@ def load_config(xml_path="config.xml"):
 CFG = load_config()
 
 # ==========================================
-# 2. TRANG & CSS
+# 2. CẤU HÌNH TRANG STREAMLIT & GIAO DIỆN CSS
 # ==========================================
+# Thiết lập tiêu đề trang, biểu tượng tab trình duyệt và chế độ hiển thị rộng (wide)
 st.set_page_config(
     page_title=f"{CFG['app_name']} – {CFG['app_title']}",
     page_icon="📖",
@@ -126,28 +150,35 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# Chèn CSS tùy biến: Thiết kế giao diện hiện đại, tối giản và đồng bộ
 render_html("""
 <style>
+/* Nhúng font chữ Be Vietnam Pro hỗ trợ tiếng Việt tối ưu */
 @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap');
 
+/* Định nghĩa bảng màu và các biến dùng chung (Design Tokens) */
 :root {
-    --bg: #f6f8fa;
-    --card: #ffffff;
-    --line: #e5e9f0;
-    --ink: #0f172a;
-    --muted: #64748b;
-    --brand: #0f766e;
-    --brand-dark: #115e59;
-    --brand-soft: #ecfdf5;
-    --radius: 16px;
+    --bg: #f6f8fa;          /* Màu nền tổng thể trang */
+    --card: #ffffff;        /* Màu nền thẻ trắng */
+    --line: #e5e9f0;        /* Màu đường viền mảnh */
+    --ink: #0f172a;         /* Màu chữ chính (Slate-900) */
+    --muted: #64748b;       /* Màu chữ phụ / mô tả (Slate-500) */
+    --brand: #0f766e;       /* Màu thương hiệu xanh ngọc (Teal-700) */
+    --brand-dark: #115e59;  /* Màu xanh ngọc đậm khi hover (Teal-800) */
+    --brand-soft: #ecfdf5;  /* Màu nền xanh nhẹ (Emerald-50) */
+    --radius: 16px;         /* Bán kính bo góc thẻ */
 }
 
+/* Áp dụng font chữ toàn diện cho ứng dụng */
 html, body, [class*="css"], .stApp {
     font-family: 'Be Vietnam Pro', -apple-system, 'Segoe UI', Roboto, sans-serif !important;
 }
 .stApp { background: var(--bg); }
+
+/* Ẩn các thanh điều khiển mặc định không cần thiết của Streamlit */
 #MainMenu, footer, header { visibility: hidden; }
 
+/* Giới hạn chiều rộng nội dung tối đa 1200px và căn giữa màn hình */
 .block-container {
     max-width: 1200px !important;
     padding: 72px 1.5rem 110px !important;
@@ -349,15 +380,19 @@ div[data-testid="stHorizontalBlock"] { align-items: center !important; }
 """)
 
 # ==========================================
-# 3. STATE
+# 3. QUẢN LÝ TRẠNG THÁI PHIÊN (SESSION STATE)
 # ==========================================
+# current_url_input: Lưu URL người dùng đang nhập vào ô text
 st.session_state.setdefault("current_url_input", "")
+# analyzed_data: Lưu kết quả phân tích sách (tiêu đề, số trang, link ảnh hoặc các ấn bản)
 st.session_state.setdefault("analyzed_data", None)
+# pdf_cache: Bộ nhớ đệm lưu file PDF đã ghép thành công trong phiên làm việc
 st.session_state.setdefault("pdf_cache", {})
 
 # ==========================================
-# 4. THANH TRÊN + HERO
+# 4. THANH ĐIỀU HƯỚNG TRÊN CÙNG (TOPBAR) & HERO BANNER
 # ==========================================
+# Thanh Topbar cố định hiển thị Logo, Tên ứng dụng VietBook, Huy hiệu miễn phí và slogan
 render_html(f"""
 <div class="vb-topbar">
     <div class="vb-nav">
@@ -369,6 +404,7 @@ render_html(f"""
     </div>
 </div>
 
+<!-- Khối Hero Banner: Giới thiệu ngắn gọn và hiển thị các số liệu thống kê kho sách -->
 <div class="vb-hero">
     <div class="vb-hero-content">
         <h1>Sách giáo khoa bản gốc, tải về trong vài giây</h1>
@@ -383,9 +419,10 @@ render_html(f"""
 """)
 
 # ==========================================
-# 5. TẢI SÁCH TỪ LINK
+# 5. CÔNG CỤ TẢI SÁCH TỪ LINK (taphuan.nxbgd.vn)
 # ==========================================
 with st.container(border=True):
+    # Tiêu đề khối tải sách kèm badge phân loại
     render_html("""
     <div style="margin-bottom: 24px;">
         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:4px;">
@@ -396,6 +433,7 @@ with st.container(border=True):
     </div>
     """)
 
+    # Hàng nhập link và nút bấm "Tải sách"
     col_inp, col_btn = st.columns([4, 1.2], gap="small")
     with col_inp:
         user_url = st.text_input(
@@ -407,9 +445,11 @@ with st.container(border=True):
     with col_btn:
         analyze_btn = st.button("Tải sách", type="primary", use_container_width=True)
 
+# Xử lý khi người dùng nhấn nút "Tải sách" hoặc thay đổi liên kết mới
 if analyze_btn or (user_url and user_url != st.session_state.get("last_analyzed_url")):
     st.session_state["current_url_input"] = user_url
     st.session_state["last_analyzed_url"] = user_url
+    # Phân tích cú pháp liên kết bằng module downloader
     parsed = downloader.parse_taphuan_url(user_url)
 
     if not parsed["valid"]:
@@ -417,9 +457,11 @@ if analyze_btn or (user_url and user_url != st.session_state.get("last_analyzed_
         st.session_state["analyzed_data"] = None
     else:
         with st.spinner("Đang lấy thông tin sách..."):
+            # Trường hợp 1: Link trực tiếp vào trang đọc 1 cuốn sách cụ thể
             if parsed["type"] == "doc_sach":
                 info, err = downloader.fetch_reader_info(parsed["url"])
                 kind = "doc_sach"
+            # Trường hợp 2: Link môn học tổng hợp gồm nhiều ấn bản (SGK, SGV, SBT, Chuyên đề...)
             else:
                 info, err = downloader.fetch_detail_editions(parsed["url"])
                 kind = "chi_tiet_sach"
@@ -431,7 +473,9 @@ if analyze_btn or (user_url and user_url != st.session_state.get("last_analyzed_
 
 res = st.session_state.get("analyzed_data")
 
-# ── Sách đơn lẻ ──
+# ──────────────────────────────────────────────────────────
+# HIỂN THỊ KẾT QUẢ TRƯỜNG HỢP 1: SÁCH ĐƠN LẺ (doc_sach)
+# ──────────────────────────────────────────────────────────
 if res and res["type"] == "doc_sach":
     book = res["data"]
     title = book["title"]
@@ -439,6 +483,7 @@ if res and res["type"] == "doc_sach":
     total_pages = book["total_pages"]
     storage = CFG.get("storage_dir")
 
+    # Hiển thị thẻ thông tin sách vừa phân tích (Tên sách, số trang, bản gốc NXBGD)
     render_html(f"""
     <div class="vb-book">
         <div class="vb-book-ico">📘</div>
@@ -449,10 +494,13 @@ if res and res["type"] == "doc_sach":
     </div>
     """)
 
+    # 1. Kiểm tra xem sách đã có sẵn file PDF trong thư mục lưu trữ offline của máy tính chưa
     offline_path, offline_sz = downloader.find_offline_pdf(title, storage)
+    # 2. Kiểm tra xem sách đã được tải và lưu trong RAM của phiên làm việc hiện tại chưa
     cached = st.session_state["pdf_cache"].get(title)
 
     if offline_path and os.path.exists(offline_path):
+        # Nếu đã có sẵn file PDF trên máy tính -> Cho phép tải trực tiếp ngay lập tức
         try:
             with open(offline_path, "rb") as f:
                 file_data = f.read()
@@ -464,6 +512,7 @@ if res and res["type"] == "doc_sach":
         except Exception as e:
             st.error(f"Lỗi đọc file: {e}")
     elif cached:
+        # Nếu vừa tải xong trong phiên này và đã có trong bộ nhớ tạm
         st.success(f"✅ Đã xử lý xong ({cached[1]:.1f} MB)")
         st.download_button(
             f"💾  Lưu file PDF về máy ({cached[1]:.1f} MB)",
@@ -471,18 +520,22 @@ if res and res["type"] == "doc_sach":
             mime="application/pdf", type="primary", use_container_width=True,
         )
     else:
+        # Nếu chưa có -> Hiển thị nút bắt đầu tải đa luồng các trang ảnh và ghép thành file PDF
         if st.button(f"📥  Bắt đầu tải PDF ({total_pages} trang)", type="primary", use_container_width=True):
             p_bar = st.progress(0)
             p_label = st.empty()
 
+            # Hàm callback cập nhật tiến độ phần trăm tải và ghép trang theo thời gian thực
             def progress_cb(current, total, msg):
                 p_bar.progress(min(int(current / total * 100), 100) if total else 0)
                 p_label.caption(f"{msg} ({current}/{total})")
 
+            # Đường dẫn lưu file trên ổ cứng nếu có cấu hình thư mục lưu trữ
             target_save = None
             if storage and os.path.exists(storage):
                 target_save = os.path.join(storage, downloader.sanitize_filename(title) + ".pdf")
 
+            # Gọi module downloader xử lý tải đa luồng (8 luồng song song) và nén thành PDF chuẩn
             pdf_bytes, sz_mb, dl_err = downloader.download_pages_and_build_pdf(
                 page_urls=page_urls, title=title, progress_callback=progress_cb,
                 save_path=target_save, max_workers=8,
@@ -490,15 +543,19 @@ if res and res["type"] == "doc_sach":
             if dl_err:
                 st.error(dl_err)
             else:
+                # Lưu vào cache phiên và chạy lại trang để hiển thị nút tải về
                 st.session_state["pdf_cache"][title] = (pdf_bytes, sz_mb)
                 st.rerun()
 
-# ── Môn học nhiều ấn bản ──
+# ──────────────────────────────────────────────────────────
+# HIỂN THỊ KẾT QUẢ TRƯỜNG HỢP 2: MÔN HỌC GỒM NHIỀU ẤN BẢN (chi_tiet_sach)
+# ──────────────────────────────────────────────────────────
 elif res and res["type"] == "chi_tiet_sach":
     detail = res["data"]
     st.markdown(f"<div class='vb-section-title'>📚 {h(detail['main_title'])} · {len(detail['editions'])} ấn bản</div>",
                 unsafe_allow_html=True)
 
+    # Hiển thị danh sách từng cuốn sách trong môn học (SGK, Sách giáo viên, Sách bài tập...)
     for i, ed in enumerate(detail["editions"]):
         off_path, off_sz = downloader.find_offline_pdf(ed["title"], CFG.get("storage_dir"))
         ok = f"✓ Có sẵn {off_sz:.1f} MB" if off_path else ""
@@ -512,15 +569,17 @@ elif res and res["type"] == "chi_tiet_sach":
             </div>
             """)
         with c2:
+            # Nhấn chọn ấn bản để đưa link đọc sách lên ô nhập và tự động phân tích trang đọc
             if st.button("Chọn tải", key=f"sel_ed_{i}", use_container_width=True):
                 st.session_state["current_url_input"] = ed["doc_url"]
                 st.session_state["last_analyzed_url"] = ""
                 st.rerun()
 
 # ==========================================
-# 6. KHO GOOGLE DRIVE
+# 6. KHO SÁCH GOOGLE DRIVE (TRỌN BỘ & 12 KHỐI LỚP)
 # ==========================================
 with st.container(border=True):
+    # Tiêu đề khối kho sách, badge phân loại, badge thời gian cập nhật và nút mở trọn bộ 52GB
     render_html(f"""
     <div style="margin-bottom: 24px;">
         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:4px;">
@@ -539,6 +598,7 @@ with st.container(border=True):
 
     st.markdown("<div class='vb-section-title' style='text-align:center;'>Hoặc chọn theo khối lớp</div>", unsafe_allow_html=True)
 
+    # Hiển thị 12 nút bấm liên kết Google Drive tương ứng từ Lớp 1 đến Lớp 12
     grades = CFG["grade_items"]
     grade_html = '<div class="vb-grade-row">'
     for g in grades:
@@ -550,11 +610,13 @@ with st.container(border=True):
     render_html(grade_html)
 
 # ==========================================
-# 7. QUẢN TRỊ (nếu có mật khẩu)
+# 7. KHU VỰC QUẢN TRỊ VIÊN (ADMIN PANEL)
 # ==========================================
+# Chỉ hiển thị khi có biến môi trường VIETBOOK_ADMIN_PASSWORD được thiết lập
 if ADMIN_PASSWORD:
     with st.expander("⚙️ Quản trị viên", expanded=False):
         if not st.session_state.get("admin_ok"):
+            # Yêu cầu nhập mật khẩu quản trị bảo mật (sử dụng hmac so sánh chuỗi an toàn chống timing attack)
             pwd = st.text_input("Mật khẩu quản trị", type="password", key="admin_pwd")
             if st.button("Xác nhận", key="btn_admin_login"):
                 if hmac.compare_digest(pwd.encode(), ADMIN_PASSWORD.encode()):
@@ -563,10 +625,12 @@ if ADMIN_PASSWORD:
                 else:
                     st.error("Sai mật khẩu.")
         else:
+            # Giao diện dành cho admin sau khi đăng nhập thành công
             st.caption("Kiểm tra và cập nhật cơ sở dữ liệu sách từ NXB Giáo dục.")
             if st.button("Bắt đầu quét dữ liệu", key="btn_check_sync"):
                 p_bar = st.progress(0)
                 p_text = st.empty()
+                # Gọi sync_manager quét đối chiếu sách trực tuyến với cơ sở dữ liệu hiện tại
                 st.session_state["sync_res"] = sync_manager.check_for_new_books(
                     lambda msg, pct: (p_bar.progress(pct), p_text.text(msg))
                 )
@@ -586,8 +650,9 @@ if ADMIN_PASSWORD:
                     st.info("Dữ liệu đã đồng bộ hoàn toàn.")
 
 # ==========================================
-# 8. FOOTER
+# 8. CHÂN TRANG (FOOTER) & LIÊN KẾT MẠNG XÃ HỘI
 # ==========================================
+# Bảng mã vector icon SVG cho các mạng xã hội phổ biến
 ICON_SVG = {
     "facebook": '<svg viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>',
     "youtube": '<svg viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>',
@@ -598,6 +663,7 @@ ICON_SVG = {
 
 
 def social_icon(s):
+    """Tạo mã HTML thẻ <a> dạng nút tròn chứa icon vector tương ứng với mạng xã hội."""
     key = f"{s.get('id', '')} {s.get('name', '')}".lower()
     if "zalo" in key:
         inner = "Zalo"
@@ -616,12 +682,16 @@ def social_icon(s):
             f'title="{h(label)}" aria-label="{h(label)}" style="background:{h(s["color"])};">{inner}</a>')
 
 
+# Tổng hợp danh sách icon mạng xã hội từ cấu hình
 icons = "".join(social_icon(s) for s in CFG["socials"])
+
+# Tổng hợp chuỗi liên kết các ứng dụng trong hệ sinh thái (vietTeach, vietFix...)
 eco = " · ".join(
     f'<a href="{h(a["url"])}" target="_blank" rel="noopener noreferrer" title="{h(a["description"])}">{h(a["name"])}</a>'
     for a in CFG["ecosystem"] if a.get("url", "#") != "#"
 )
 
+# Hiển thị chân trang cố định ở đáy màn hình
 render_html(f"""
 <div class="vb-footer">
     <div class="vb-footer-inner">

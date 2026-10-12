@@ -1,4 +1,4 @@
-# vietBook 📖 - Trình tải sách giáo khoa gốc & Kho Google Drive
+# VietBook 📖 - Trình tải sách giáo khoa gốc & Kho Google Drive
 
 Ứng dụng web và công cụ dòng lệnh thuộc hệ sinh thái **vietApps** phục vụ giáo viên, học sinh và phụ huynh:
 1. **Trình tải sách chuyên nghiệp:** Chỉ cần sao chép link từ [taphuan.nxbgd.vn](https://taphuan.nxbgd.vn) để tải trọn bộ file PDF chất lượng gốc.

@@ -1,6 +1,6 @@
 @echo off
-title vietBook Runner
-echo Starting vietBook...
+title VietBook Runner
+echo Starting VietBook...
 cd /d "%~dp0"
 
 if exist ".venv\Scripts\activate.bat" (
@@ -12,6 +12,6 @@ if exist ".venv\Scripts\activate.bat" (
 
 if %ERRORLEVEL% NEQ 0 (
     echo.
-    echo [ERROR] An error occurred while launching vietBook.
+    echo [ERROR] An error occurred while launching VietBook.
     pause
 )

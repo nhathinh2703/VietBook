@@ -3,13 +3,13 @@
     <!-- THÔNG TIN THƯƠNG HIỆU & TIÊU ĐỀ -->
     <brand>
         <masterName>vietApps</masterName>
-        <appName>vietBook</appName>
+        <appName>VietBook</appName>
         <badge>Miễn phí</badge>
         <tagline>Hệ sinh thái ứng dụng miễn phí phục vụ cộng đồng</tagline>
         <appTitle>Trình tải sách giáo khoa gốc &amp; Kho Google Drive</appTitle>
         <heroTitle>Trình tải sách giáo khoa bản gốc</heroTitle>
         <appDescription>Hỗ trợ dán link tải sách bản gốc chất lượng cao từ taphuan.nxbgd.vn và chia sẻ trọn bộ sách giáo viên, sách giáo khoa, sách bài tập trên Google Drive.</appDescription>
-        <copyright>© 2026 vietApps • vietBook</copyright>
+        <copyright>© 2026 vietApps • VietBook</copyright>
         <supportEmail>vietapps.official@gmail.com</supportEmail>
         <connectMessage>Kết nối cộng đồng vietApps</connectMessage>
         <!-- Link Google Drive trọn bộ -->
@@ -51,8 +51,8 @@
 
     <!-- HỆ SINH THÁI CÁC ỨNG DỤNG -->
     <ecosystem>
-        <app id="vietBook">
-            <name>vietBook</name>
+        <app id="VietBook">
+            <name>VietBook</name>
             <badge>Miễn phí</badge>
             <badgeColor>#10b981</badgeColor>
             <tagline>Tải sách &amp; Kho Google Drive</tagline>
